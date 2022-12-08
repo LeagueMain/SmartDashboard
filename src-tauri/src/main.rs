@@ -30,8 +30,33 @@ fn main() {
         "Hello, world!"
       }
 
+      #[get("/putNumber/<key>/<num>")]
+      fn put_number(key: String, num: f64) -> String {
+        let window = WINDOW.get().expect("window is available");
+        let ret_data = format!("{}:{}", key, num);
+        window.emit("put-number", ret_data.clone()).expect("emit works");
+        ret_data
+      }
+
+      #[get("/putBoolean/<key>/<value>")]
+      fn put_boolean(key: String, value: bool) -> String {
+        let window = WINDOW.get().expect("window is available");
+        let ret_data = format!("{}:{}", key, value);
+        window.emit("put-boolean", ret_data.clone()).expect("emit works");
+        ret_data
+      }
+
+      #[get("/putString/<key>/<value>")]
+      fn put_string(key: String, value: String) -> String {
+        let window = WINDOW.get().expect("window is available");
+        let ret_data = format!("{}:{}", key, value);
+        window.emit("put-string", ret_data.clone()).expect("emit works");
+        ret_data
+      }
+
       tauri::async_runtime::spawn(async move {
-        let _rocket = rocket::ignite().mount("/", routes![index]).launch();
+        let _rocket = rocket::ignite()
+          .mount("/", routes![index, put_number, put_boolean, put_string]).launch();
       });
       Ok(())
     })
