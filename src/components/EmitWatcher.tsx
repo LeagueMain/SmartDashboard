@@ -1,119 +1,74 @@
 import { useAtom } from "jotai";
 import { appWindow } from "@tauri-apps/api/window";
 import { useEffect } from "react";
-import { dashNumbers, dashBooleans, dashStrings, dashItems } from "../atoms/atoms";
+import {dashboardItems, timerAtom} from "../atoms/atoms";
+import { invoke } from "@tauri-apps/api/tauri";
+import {Timer} from "../types/types";
 
 
 const EmitWatcher: React.FC = () => {
-  const [nums, setNums] = useAtom(dashNumbers);
-  const [bools, setBools] = useAtom(dashBooleans);
-  const [strings, setStrings] = useAtom(dashStrings);
-  const [items, _] = useAtom(dashItems);
+  const [items, setItems] = useAtom(dashboardItems);
+  const [_, setTime] = useAtom(timerAtom);
+
+  type emitType = "number" | "boolean" | "string"
 
   useEffect(() => {
     async function func() {
-      await appWindow.listen<string>('put-number', 
-        ({payload}) => handlePutNumber(payload)
+      appWindow.listen<string>('put-number',
+      ({payload}) => {
+          console.log(payload);
+          putItem(payload, "number");
+        }
       )
-      await appWindow.listen<string>('put-boolean',
-        ({payload}) => handlePutBoolean(payload)
+      appWindow.listen<string>('put-boolean',
+      ({payload}) => {
+          putItem(payload, "boolean");
+        }
       )
-      await appWindow.listen<string>('put-string',
-        ({payload}) => handlePutString(payload)
+      appWindow.listen<string>('put-string',
+      ({payload}) => {
+            putItem(payload, "string");
+        }
+      )
+
+      invoke("report_time_elapsed");
+      appWindow.listen<Timer>('time_elapsed',
+        ({payload}) => {
+          setTime(payload);
+        }
       )
     }
     func();
   }, [])
 
-  function handlePutNumber(payload: string) {
-    const [key, value] = payload.split(":");
+  function putItem(payload: string, type: emitType = "string") {
+    const [key, value] = payload.split(':');
 
-    // ensure value is valid
-    if (value === undefined) throw Error('value is undefined');
-    if (Number.isNaN(parseFloat(value))) throw Error('value isn\'t a number');
-
-    // check if key exists in other maps
-    if (bools.has(String(key))) {
-      // delete from bools
-      setBools((prev) => {
-        const temp = new Map([...prev]);
-        temp.delete(String(key));
-        return temp;
-      });
-    } else if (strings.has(String(key))) {
-      // delete from strings
-      setStrings((prev) => {
-        const temp = new Map([...prev]);
-        temp.delete(String(key));
-        return temp;
-      });
-    }
-    // add to nums
-    setNums((prev) => {
-      const temp = new Map([...prev])
-      temp.set(String(key), parseFloat(value));
-      return temp;
-    });
-  }
-
-  function handlePutBoolean(payload: string) {
-    const [key, value] = payload.split(":");
-    // ensure value is valid
-    if (value === undefined) throw Error('value is undefined');
-    if (value !== 'true' && value !== 'false') throw Error('value isn\'t a boolean');
-
-    // check if key exists in other maps
-    if (nums.has(String(key))) {
-      // delete from nums
-      setNums((prev) => {
-        const temp = new Map([...prev]);
-        temp.delete(String(key));
-        return temp;
-      });
-    } else if (strings.has(String(key))) {
-      // delete from strings
-      setStrings((prev) => {
-        const temp = new Map([...prev]);
-        temp.delete(String(key));
-        return temp;
-      });
+    if (key === undefined || key === "") throw new Error("key is undefined or empty");
+    if (value === undefined) throw new Error('Invalid payload: value is undefined');
+    switch (type) {
+      case "number":
+        if (isNaN(Number(value))) throw new Error('Invalid payload: value is not a number');
+        if (items.has(key) && typeof items.get(key) !== "number")
+          throw new Error('Invalid payload: key already exists and is not a number');
+        break;
+      case "boolean":
+        if (value !== 'true' && value !== 'false') throw new Error('Invalid payload: value is not a boolean');
+        if (items.has(key) && typeof items.get(key) !== "boolean")
+          throw new Error('Invalid payload: key already exists and is not a boolean');
+        break;
+      case "string":
+        if (items.has(key) && typeof items.get(key) !== "string")
+            throw new Error('Invalid payload: key already exists and is not a string');
+        break;
     }
 
-    // add to bools map
-    setBools((prev) => {
-      const temp = new Map([...prev]);
-      temp.set(String(key), value === 'true');
-      return temp;
-    });
-  }
-
-  function handlePutString(payload: string) {
-    const [key, value] = payload.split(":");
-    
-    // ensure value is valid
-    if (value === undefined) throw Error('value is undefined');
-    
-    // check if key exists in other maps
-    if (nums.has(String(key))) {
-      // delete from nums
-      setNums((prev) => {
-        const temp = new Map([...prev]);
-        temp.delete(String(key));
-        return temp;
-      });
-    } else if (bools.has(String(key))) {
-      // delete from bools
-      setBools((prev) => {
-        const temp = new Map([...prev]);
-        temp.delete(String(key));
-        return temp;
-      });
-    }
-
-    // add to strings map
-    setStrings((prev) => {
-      const temp = new Map([...prev]);
-      temp.set(String(key), value);
+    // don't update if key already exists
+    if (items.get(key) === value) return;
+    // update
+    setItems((prev)=> {
+      const temp = new Map(prev);
+      temp.set(key, value);
       return temp;
     });
   }
